@@ -1,4 +1,4 @@
-# ghosttyfx
+# cljfx/ghosttyfx
 
 [Cljfx](https://github.com/cljfx/cljfx) wrapper for [GhosttyFX](https://github.com/vlaaad/ghosttyfx).
 
