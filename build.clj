@@ -39,8 +39,10 @@
      :lib lib
      :version version
      :src-dirs ["src"]
-     :licenses [{:name "MIT License"
-                 :url "https://opensource.org/license/mit"}]
+     :pom-data [[:licenses
+                 [:license
+                  [:name "MIT License"]
+                  [:url "https://opensource.org/license/mit"]]]]
      :scm {:url "https://github.com/cljfx/ghosttyfx"
            :tag (b/git-process {:git-args ["rev-parse" "HEAD"]})}})
   (b/copy-dir

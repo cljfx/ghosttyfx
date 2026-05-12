@@ -7,7 +7,7 @@ on:
 
 jobs:
   test:
-    name: Tests and format check
+    name: Validate and Release
     runs-on: ubuntu-latest
 
     steps:

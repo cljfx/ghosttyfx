@@ -14,7 +14,6 @@
   :fmt {:extra-deps {dev.weavejester/cljfmt {:mvn/version "0.16.4"}}
         :main-opts ["-m" "cljfmt.main"]}
 
-  :build {:deps {io.github.clojure/tools.build {:git/tag "v0.8.2"
-                                                :git/sha "ba1a2bf"}
+  :build {:deps {io.github.clojure/tools.build {:mvn/version "0.10.9"}
                  clj-commons/pomegranate {:mvn/version "1.2.0"}}
           :ns-default build}}}
