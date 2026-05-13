@@ -2,7 +2,7 @@
   (:require [cljfx.api :as fx]
             [cljfx.ghosttyfx :as ghosttyfx]
             [clojure.test :as t])
-  (:import [io.github.vlaaad.ghosttyfx Terminal TerminalView]
+  (:import [io.github.vlaaad.ghosttyfx Terminal TerminalFactory TerminalView]
            [java.io ByteArrayInputStream OutputStream]
            [java.nio.charset StandardCharsets]
            [javafx.scene.text Font]))
@@ -22,6 +22,16 @@
   (fn [_ _]
     (terminal output close-count)))
 
+(defrecord CountingTerminalFactory [id output open-count close-count]
+  TerminalFactory
+  (open [_ _ _]
+    (swap! open-count inc)
+    (terminal output close-count)))
+
+(defn- terminal-view-desc [terminal-factory]
+  {:fx/type ghosttyfx/view
+   :terminal-factory terminal-factory})
+
 (t/deftest creates-and-deletes-terminal-view
   (let [close-count (atom 0)
         component @(fx/on-fx-thread
@@ -34,6 +44,37 @@
         @(fx/on-fx-thread
            (fx/delete-component component))))
     (t/is (= 1 @close-count))))
+
+(t/deftest terminal-factory-equality-controls-recreation
+  (let [open-count (atom 0)
+        close-count (atom 0)
+        factory-1 (->CountingTerminalFactory :same "" open-count close-count)
+        equal-factory (->CountingTerminalFactory :same "" open-count close-count)
+        different-factory (->CountingTerminalFactory :different "" open-count close-count)
+        component* (atom @(fx/on-fx-thread
+                            (fx/create-component
+                              (terminal-view-desc factory-1))))]
+    (try
+      (let [view-1 (fx/instance @component*)]
+        (reset! component*
+          @(fx/on-fx-thread
+             (fx/advance-component
+               @component*
+               (terminal-view-desc equal-factory))))
+        (let [view-2 (fx/instance @component*)]
+          (t/is (identical? view-1 view-2))
+          (t/is (= 1 @open-count))
+          (reset! component*
+            @(fx/on-fx-thread
+               (fx/advance-component
+                 @component*
+                 (terminal-view-desc different-factory))))
+          (let [view-3 (fx/instance @component*)]
+            (t/is (not (identical? view-2 view-3)))))
+        (t/is (= 2 @open-count)))
+      (finally
+        @(fx/on-fx-thread
+           (fx/delete-component @component*))))))
 
 (t/deftest applies-terminal-view-props
   (let [close-count (atom 0)
