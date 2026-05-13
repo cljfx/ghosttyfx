@@ -66,13 +66,15 @@
         (let [view-2 (fx/instance @component*)]
           (t/is (identical? view-1 view-2))
           (t/is (= 1 @open-count))
-          (reset! component*
-            @(fx/on-fx-thread
-               (fx/advance-component
-                 @component*
-                 (terminal-view-desc different-factory))))
-          (let [view-3 (fx/instance @component*)]
-            (t/is (not (identical? view-2 view-3)))))
+          (let [close-count-before-recreate @close-count]
+            (reset! component*
+              @(fx/on-fx-thread
+                 (fx/advance-component
+                   @component*
+                   (terminal-view-desc different-factory))))
+            (let [view-3 (fx/instance @component*)]
+              (t/is (not (identical? view-2 view-3)))
+              (t/is (= (inc close-count-before-recreate) @close-count)))))
         (t/is (= 2 @open-count)))
       (finally
         @(fx/on-fx-thread
