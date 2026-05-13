@@ -4,9 +4,22 @@
             [cljfx.fx.region :as fx.region]
             [cljfx.lifecycle :as lifecycle]
             [cljfx.mutator :as mutator])
-  (:import [io.github.vlaaad.ghosttyfx TerminalView]))
+  (:import [io.github.vlaaad.ghosttyfx TerminalView]
+           [java.util Collection]
+           [javafx.collections ObservableList]))
 
 (set! *warn-on-reflection* true)
+
+(defn- resettable-observable-list [get-list-fn default-list-fn]
+  (let [set-all! #(.setAll ^ObservableList (get-list-fn %1) ^Collection %2)]
+    (reify mutator/Mutator
+      (assign! [_ instance coerce value]
+        (set-all! instance (coerce value)))
+      (replace! [_ instance coerce old-value new-value]
+        (when-not (= old-value new-value)
+          (set-all! instance (coerce new-value))))
+      (retract! [_ instance _ _]
+        (set-all! instance (default-list-fn instance))))))
 
 (def props
   (merge
@@ -19,8 +32,8 @@
       :search-prompt-text [:setter lifecycle/scalar :default "Type to search..."]
       :theme [:setter lifecycle/scalar]
       :mac-option-as-alt [:setter lifecycle/scalar :default false]
-      :terminal-shortcuts [:list lifecycle/scalar :default []]
-      :link-matchers [:list lifecycle/scalar :default []]
+      :terminal-shortcuts [(resettable-observable-list TerminalView/.getTerminalShortcuts TerminalView/.defaultTerminalShortcuts) lifecycle/scalar]
+      :link-matchers [(resettable-observable-list TerminalView/.getLinkMatchers TerminalView/.defaultLinkMatchers) lifecycle/scalar]
       :on-bell [:setter lifecycle/event-handler :coerce coerce/runnable]
       :on-title-changed [:property-change-listener lifecycle/change-listener]
       :on-terminal-state-changed [:property-change-listener lifecycle/change-listener])))
@@ -31,7 +44,7 @@
       TerminalView
       :ctor [:terminal-factory]
       :props props)
-    #(.close ^TerminalView %)))
+    TerminalView/.close))
 
 (def view
   (lifecycle/annotate

@@ -78,8 +78,3 @@ when the new factory is not equal to the previous factory, Cljfx closes the old
 
 See [examples/pty4j_terminal.clj](examples/pty4j_terminal.clj) for a complete
 example, including shell detection and JavaFX application setup.
-
-
-
-todo:
-- proper defaults reset for lists (needs ghosttyfx update)

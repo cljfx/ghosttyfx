@@ -2,9 +2,11 @@
   (:require [cljfx.api :as fx]
             [cljfx.ghosttyfx :as ghosttyfx]
             [clojure.test :as t])
-  (:import [io.github.vlaaad.ghosttyfx Terminal TerminalFactory TerminalView]
+  (:import [io.github.vlaaad.ghosttyfx Terminal TerminalFactory TerminalLinkMatcher TerminalShortcut TerminalView]
            [java.io ByteArrayInputStream OutputStream]
            [java.nio.charset StandardCharsets]
+           [java.util.regex Pattern]
+           [javafx.scene.input KeyCombination]
            [javafx.scene.text Font]))
 
 (defn- terminal [output close-count]
@@ -98,4 +100,63 @@
       (finally
         @(fx/on-fx-thread
            (fx/delete-component component))))
+    (t/is (= 1 @close-count))))
+
+(t/deftest retracts-terminal-shortcuts-to-defaults
+  (let [close-count (atom 0)
+        terminal-factory (terminal-factory "" close-count)
+        custom-shortcut (TerminalShortcut.
+                          (KeyCombination/keyCombination "Shift+B")
+                          (fn [] false))
+        component* (atom @(fx/on-fx-thread
+                            (fx/create-component
+                              {:fx/type ghosttyfx/view
+                               :terminal-factory terminal-factory
+                               :terminal-shortcuts [custom-shortcut]})))]
+    (try
+      (let [^TerminalView view (fx/instance @component*)
+            default-combinations (mapv #(.combination ^TerminalShortcut %)
+                                   (.defaultTerminalShortcuts view))]
+        (t/is (= [custom-shortcut] (vec (.getTerminalShortcuts view))))
+        (reset! component*
+          @(fx/on-fx-thread
+             (fx/advance-component
+               @component*
+               {:fx/type ghosttyfx/view
+                :terminal-factory terminal-factory})))
+        (let [^TerminalView advanced-view (fx/instance @component*)]
+          (t/is (identical? view advanced-view))
+          (t/is (= default-combinations
+                  (mapv #(.combination ^TerminalShortcut %)
+                    (.getTerminalShortcuts advanced-view))))))
+      (finally
+        @(fx/on-fx-thread
+           (fx/delete-component @component*))))
+    (t/is (= 1 @close-count))))
+
+(t/deftest retracts-link-matchers-to-defaults
+  (let [close-count (atom 0)
+        terminal-factory (terminal-factory "" close-count)
+        custom-link-matcher (TerminalLinkMatcher. (Pattern/compile "issue-(\\d+)") (fn [_]))
+        component* (atom @(fx/on-fx-thread
+                            (fx/create-component
+                              {:fx/type ghosttyfx/view
+                               :terminal-factory terminal-factory
+                               :link-matchers [custom-link-matcher]})))]
+    (try
+      (let [^TerminalView view (fx/instance @component*)]
+        (t/is (= [custom-link-matcher] (vec (.getLinkMatchers view))))
+        (reset! component*
+          @(fx/on-fx-thread
+             (fx/advance-component
+               @component*
+               {:fx/type ghosttyfx/view
+                :terminal-factory terminal-factory})))
+        (let [^TerminalView advanced-view (fx/instance @component*)]
+          (t/is (identical? view advanced-view))
+          (t/is (= (vec (.defaultLinkMatchers advanced-view))
+                  (vec (.getLinkMatchers advanced-view))))))
+      (finally
+        @(fx/on-fx-thread
+           (fx/delete-component @component*))))
     (t/is (= 1 @close-count))))
