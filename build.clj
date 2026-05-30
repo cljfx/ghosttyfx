@@ -1,5 +1,6 @@
 (ns build
   (:require [cemerick.pomegranate.aether :as aether]
+            [clojure.string :as str]
             [clojure.tools.build.api :as b]))
 
 (def lib 'io.github.cljfx/ghosttyfx)
@@ -10,8 +11,8 @@
 
 (def ghosttyfx-version
   (or (get-in basis [:libs 'io.github.vlaaad/ghosttyfx :mvn/version])
-      (throw (IllegalStateException.
-               "Could not find io.github.vlaaad/ghosttyfx version in basis"))))
+    (throw (IllegalStateException.
+             "Could not find io.github.vlaaad/ghosttyfx version in basis"))))
 
 (def version (format "%s.%s" ghosttyfx-version (b/git-count-revs nil)))
 
@@ -21,11 +22,38 @@
 
 (defn- clojars-repository [username token]
   (-> basis
-      :mvn/repos
-      (select-keys ["clojars"])
-      (update "clojars" assoc
-              :username username
-              :password token)))
+    :mvn/repos
+    (select-keys ["clojars"])
+    (update "clojars" assoc
+      :username username
+      :password token)))
+
+(defn bump-ghosttyfx [_]
+  (let [latest-version (second (re-find #"<release>([^<]+)</release>"
+                                 (slurp "https://repo1.maven.org/maven2/io/github/vlaaad/ghosttyfx/maven-metadata.xml")))]
+    (when-not (= ghosttyfx-version latest-version)
+      (when-not (zero? (:exit (b/process
+                                (assoc
+                                  (b/java-command
+                                    {:basis (b/create-basis
+                                              {:project "deps.edn"
+                                               :aliases [:test]
+                                               :extra {:override-deps
+                                                       {'io.github.vlaaad/ghosttyfx
+                                                        {:mvn/version latest-version}}}})
+                                     :main 'clojure.main
+                                     :main-args ["-m" "cognitect.test-runner"]})
+                                  :out :inherit
+                                  :err :inherit))))
+        (throw (IllegalStateException. "Tests failed")))
+      (spit "deps.edn"
+        (str/replace-first
+          (slurp "deps.edn")
+          (re-pattern
+            (str "(io\\.github\\.vlaaad/ghosttyfx\\s+\\{:mvn/version\\s+\")"
+              ghosttyfx-version
+              "(\"\\})"))
+          (str "$1" latest-version "$2"))))))
 
 (defn deploy [{:keys [username token]}]
   (when-not username
