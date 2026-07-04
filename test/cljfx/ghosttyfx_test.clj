@@ -2,7 +2,7 @@
   (:require [cljfx.api :as fx]
             [cljfx.ghosttyfx :as ghosttyfx]
             [clojure.test :as t])
-  (:import [io.github.vlaaad.ghosttyfx Terminal TerminalFactory TerminalLinkMatcher TerminalShortcut TerminalView]
+  (:import [io.github.vlaaad.ghosttyfx Terminal TerminalFactory TerminalLinkMatcher TerminalShortcut TerminalSize TerminalView]
            [java.io ByteArrayInputStream OutputStream]
            [java.nio.charset StandardCharsets]
            [java.util.regex Pattern]
@@ -42,6 +42,28 @@
                         :terminal-factory (terminal-factory "hello" close-count)}))]
     (try
       (t/is (instance? TerminalView (fx/instance component)))
+      (finally
+        @(fx/on-fx-thread
+           (fx/delete-component component))))
+    (t/is (= 1 @close-count))))
+
+(t/deftest reports-terminal-size-changes
+  (let [close-count (atom 0)
+        terminal-size (atom nil)
+        component @(fx/on-fx-thread
+                     (fx/create-component
+                       {:fx/type ghosttyfx/view
+                        :terminal-factory (terminal-factory "" close-count)
+                        :on-terminal-size-changed #(reset! terminal-size %)}))]
+    (try
+      @(fx/on-fx-thread
+         (let [^TerminalView view (fx/instance component)
+               initial-size (.getTerminalSize view)]
+           (.resize view 400 200)
+           (let [size (.getTerminalSize view)]
+             (t/is (instance? TerminalSize size))
+             (t/is (not= initial-size size))
+             (t/is (= size @terminal-size)))))
       (finally
         @(fx/on-fx-thread
            (fx/delete-component component))))
