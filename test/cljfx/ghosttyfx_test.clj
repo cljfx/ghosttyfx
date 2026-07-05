@@ -5,6 +5,7 @@
   (:import [io.github.vlaaad.ghosttyfx Terminal TerminalFactory TerminalLinkMatcher TerminalShortcut TerminalSize TerminalView]
            [java.io ByteArrayInputStream OutputStream]
            [java.nio.charset StandardCharsets]
+           [java.util.concurrent CountDownLatch TimeUnit]
            [java.util.regex Pattern]
            [javafx.scene.input KeyCombination]
            [javafx.scene.text Font]))
@@ -47,13 +48,33 @@
            (fx/delete-component component))))
     (t/is (= 1 @close-count))))
 
-(t/deftest reports-terminal-size-changes
-  (let [close-count (atom 0)
-        terminal-size (atom nil)
+(t/deftest reports-current-directory-changes
+  (let [expected "file:///tmp/ghosttyfx"
+        observed (atom nil)
+        latch (CountDownLatch. 1)
         component @(fx/on-fx-thread
                      (fx/create-component
                        {:fx/type ghosttyfx/view
-                        :terminal-factory (terminal-factory "" close-count)
+                        :terminal-factory (terminal-factory (str "\u001B]7;" expected "\u001B\\") (atom 0))
+                        :on-current-directory-changed #(do
+                                                         (reset! observed %)
+                                                         (when (= expected %)
+                                                           (.countDown latch)))}))]
+    (try
+      (t/is (.await latch 5 TimeUnit/SECONDS))
+      (t/is (= expected @observed))
+      (t/is (= expected @(fx/on-fx-thread
+                           (.getCurrentDirectory ^TerminalView (fx/instance component)))))
+      (finally
+        @(fx/on-fx-thread
+           (fx/delete-component component))))))
+
+(t/deftest reports-terminal-size-changes
+  (let [terminal-size (atom nil)
+        component @(fx/on-fx-thread
+                     (fx/create-component
+                       {:fx/type ghosttyfx/view
+                        :terminal-factory (terminal-factory "" (atom 0))
                         :on-terminal-size-changed #(reset! terminal-size %)}))]
     (try
       @(fx/on-fx-thread
@@ -66,8 +87,7 @@
              (t/is (= size @terminal-size)))))
       (finally
         @(fx/on-fx-thread
-           (fx/delete-component component))))
-    (t/is (= 1 @close-count))))
+           (fx/delete-component component))))))
 
 (t/deftest terminal-factory-equality-controls-recreation
   (let [open-count (atom 0)
@@ -103,11 +123,10 @@
            (fx/delete-component @component*))))))
 
 (t/deftest applies-terminal-view-props
-  (let [close-count (atom 0)
-        component @(fx/on-fx-thread
+  (let [component @(fx/on-fx-thread
                      (fx/create-component
                        {:fx/type ghosttyfx/view
-                        :terminal-factory (terminal-factory "" close-count)
+                        :terminal-factory (terminal-factory "" (atom 0))
                         :font {:family "Monospaced" :size 18}
                         :cursor-blinking false
                         :search-prompt-text "Search"
@@ -123,12 +142,10 @@
         (t/is (true? (.isMacOptionAsAlt view))))
       (finally
         @(fx/on-fx-thread
-           (fx/delete-component component))))
-    (t/is (= 1 @close-count))))
+           (fx/delete-component component))))))
 
 (t/deftest retracts-terminal-shortcuts-to-defaults
-  (let [close-count (atom 0)
-        terminal-factory (terminal-factory "" close-count)
+  (let [terminal-factory (terminal-factory "" (atom 0))
         custom-shortcut (TerminalShortcut.
                           (KeyCombination/keyCombination "Shift+B")
                           (fn [] false))
@@ -155,12 +172,10 @@
                     (.getTerminalShortcuts advanced-view))))))
       (finally
         @(fx/on-fx-thread
-           (fx/delete-component @component*))))
-    (t/is (= 1 @close-count))))
+           (fx/delete-component @component*))))))
 
 (t/deftest retracts-link-matchers-to-defaults
-  (let [close-count (atom 0)
-        terminal-factory (terminal-factory "" close-count)
+  (let [terminal-factory (terminal-factory "" (atom 0))
         custom-link-matcher (TerminalLinkMatcher. (Pattern/compile "issue-(\\d+)") (fn [_]))
         component* (atom @(fx/on-fx-thread
                             (fx/create-component
@@ -182,5 +197,4 @@
                   (vec (.getLinkMatchers advanced-view))))))
       (finally
         @(fx/on-fx-thread
-           (fx/delete-component @component*))))
-    (t/is (= 1 @close-count))))
+           (fx/delete-component @component*))))))

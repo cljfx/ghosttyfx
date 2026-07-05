@@ -36,6 +36,7 @@
       :link-matchers [(resettable-observable-list TerminalView/.getLinkMatchers TerminalView/.defaultLinkMatchers) lifecycle/scalar]
       :on-bell [:setter lifecycle/event-handler :coerce coerce/runnable]
       :on-title-changed [:property-change-listener lifecycle/change-listener]
+      :on-current-directory-changed [:property-change-listener lifecycle/change-listener]
       :on-terminal-size-changed [:property-change-listener lifecycle/change-listener]
       :on-terminal-state-changed [:property-change-listener lifecycle/change-listener])))
 
