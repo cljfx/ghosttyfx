@@ -4,31 +4,28 @@
             [clojure.java.process :as process]
             [clojure.string :as str])
   (:import [com.pty4j PtyProcess PtyProcessBuilder WinSize]
-           [io.github.vlaaad.ghosttyfx Shell Terminal TerminalFactory]
+           [com.pty4j.unix UnixPtyProcess]
+           [io.github.vlaaad.ghosttyfx Shell Terminal TerminalFactory UnixPtyFileDescriptor]
            [javafx.application Platform]))
 
 (set! *warn-on-reflection* true)
 
-(defn- windows? []
-  (str/includes? (str/lower-case (System/getProperty "os.name" "")) "win"))
-
-(defn- command [candidate]
-  (some-> (try
-            (process/exec (if (windows?) "where.exe" "which") candidate)
-            (catch RuntimeException _))
-          str/split-lines
-          first
-          str/trim
-          not-empty
-          vector))
-
 (defn- detect-shell []
-  (or (->> (if (windows?)
-             ["pwsh.exe" "powershell.exe" "cmd.exe" (System/getenv "COMSPEC")]
-             [(System/getenv "SHELL") "bash" "zsh" "fish" "sh"])
-           (remove str/blank?)
-           (some command))
-      (throw (ex-info "No suitable shell found" {}))))
+  (let [windows (str/starts-with? (str/lower-case (System/getProperty "os.name" "")) "windows")]
+    (or (->> (if windows
+               ["pwsh.exe" "powershell.exe" "cmd.exe" (System/getenv "COMSPEC")]
+               [(System/getenv "SHELL") "bash" "zsh" "fish" "sh"])
+             (remove str/blank?)
+             (some (fn [candidate]
+                     (some-> (try
+                               (process/exec (if windows "where.exe" "which") candidate)
+                               (catch RuntimeException _))
+                             str/split-lines
+                             first
+                             str/trim
+                             not-empty
+                             vector))))
+        (throw (IllegalStateException. "No suitable shell found")))))
 
 (defrecord PtyTerminalFactory [cmd cwd env]
   TerminalFactory
@@ -49,8 +46,15 @@
           (.getInputStream process))
         (input [_]
           (.getOutputStream process))
-        (resize [_ columns rows]
-          (.setWinSize process (WinSize. columns rows)))
+        (resize [_ columns rows width-px height-px]
+          (if (instance? UnixPtyProcess process)
+            (UnixPtyFileDescriptor/resize
+              (.getMasterFD (.getPty ^UnixPtyProcess process))
+              columns
+              rows
+              width-px
+              height-px)
+            (.setWinSize process (WinSize. columns rows))))
         (close [_]
           (.destroy process)
           (when-not (.waitFor process 2 java.util.concurrent.TimeUnit/SECONDS)
