@@ -2,8 +2,8 @@
   (:require [cljfx.api :as fx]
             [cljfx.ghosttyfx :as ghosttyfx]
             [clojure.test :as t])
-  (:import [io.github.vlaaad.ghosttyfx Terminal TerminalFactory TerminalLinkMatcher TerminalShortcut TerminalSize TerminalView]
-           [java.io ByteArrayInputStream OutputStream]
+  (:import [io.github.vlaaad.ghosttyfx Notification Progress$Determinate Progress$State Terminal TerminalFactory TerminalLinkMatcher TerminalShortcut TerminalSize TerminalView]
+           [java.io ByteArrayInputStream OutputStream PipedInputStream PipedOutputStream]
            [java.nio.charset StandardCharsets]
            [java.util.concurrent CountDownLatch TimeUnit]
            [java.util.regex Pattern]
@@ -68,6 +68,50 @@
       (finally
         @(fx/on-fx-thread
            (fx/delete-component component))))))
+
+(t/deftest reports-notifications-and-progress
+  (with-open [terminal-output (PipedInputStream.)
+              terminal-writer (PipedOutputStream. terminal-output)]
+    (let [expected-notification (Notification. "Codex" "Needs attention")
+          expected-progress (Progress$Determinate. Progress$State/ACTIVE 42)
+          observed-notification (atom nil)
+          observed-progress (atom nil)
+          latch (CountDownLatch. 2)
+          component @(fx/on-fx-thread
+                       (fx/create-component
+                         {:fx/type ghosttyfx/view
+                          :terminal-factory (fn [_ _]
+                                              (reify Terminal
+                                                (output [_]
+                                                  terminal-output)
+                                                (input [_]
+                                                  (OutputStream/nullOutputStream))
+                                                (resize [_ _ _])
+                                                (close [_]
+                                                  (.close terminal-output))))
+                          :on-notification #(do
+                                              (reset! observed-notification %)
+                                              (when (= expected-notification %)
+                                                (.countDown latch)))
+                          :on-progress-changed #(do
+                                                  (reset! observed-progress %)
+                                                  (when (= expected-progress %)
+                                                    (.countDown latch)))}))]
+      (try
+        (.write terminal-writer
+          (.getBytes
+            "\u001B]777;notify;Codex;Needs attention\u001B\\\u001B]9;4;1;42\u001B\\"
+            StandardCharsets/UTF_8))
+        (.flush terminal-writer)
+        (t/is (.await latch 5 TimeUnit/SECONDS))
+        (t/is (= expected-notification @observed-notification))
+        (t/is (= expected-progress @observed-progress))
+        (t/is (= expected-progress
+                @(fx/on-fx-thread
+                   (.getProgress ^TerminalView (fx/instance component)))))
+        (finally
+          @(fx/on-fx-thread
+             (fx/delete-component component)))))))
 
 (t/deftest reports-terminal-size-changes
   (let [terminal-size (atom nil)

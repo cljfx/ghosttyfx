@@ -6,6 +6,7 @@
             [cljfx.mutator :as mutator])
   (:import [io.github.vlaaad.ghosttyfx TerminalView]
            [java.util Collection]
+           [java.util.function Consumer]
            [javafx.collections ObservableList]))
 
 (set! *warn-on-reflection* true)
@@ -21,6 +22,14 @@
       (retract! [_ instance _ _]
         (set-all! instance (default-list-fn instance))))))
 
+(defn- coerce-consumer [value]
+  (cond
+    (instance? Consumer value) value
+    (fn? value) (reify Consumer
+                  (accept [_ event]
+                    (value event)))
+    :else (coerce/fail Consumer value)))
+
 (def props
   (merge
     fx.region/props
@@ -35,8 +44,10 @@
       :terminal-shortcuts [(resettable-observable-list TerminalView/.getTerminalShortcuts TerminalView/.defaultTerminalShortcuts) lifecycle/scalar]
       :link-matchers [(resettable-observable-list TerminalView/.getLinkMatchers TerminalView/.defaultLinkMatchers) lifecycle/scalar]
       :on-bell [:setter lifecycle/event-handler :coerce coerce/runnable]
+      :on-notification [:setter lifecycle/event-handler :coerce coerce-consumer]
       :on-title-changed [:property-change-listener lifecycle/change-listener]
       :on-current-directory-changed [:property-change-listener lifecycle/change-listener]
+      :on-progress-changed [:property-change-listener lifecycle/change-listener]
       :on-terminal-size-changed [:property-change-listener lifecycle/change-listener]
       :on-terminal-state-changed [:property-change-listener lifecycle/change-listener])))
 
